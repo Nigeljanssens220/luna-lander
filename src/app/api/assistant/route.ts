@@ -1,19 +1,18 @@
 import { env } from '@/env.mjs'
-import { createMessage, createThread, openai, runStream } from '@/lib/openai'
+import { createMessage, createThread, getDragons, getRockets, getStarlink, runStream } from '@/helpers/openai'
+import { isAuthenticated } from '@/lib/auth'
+import { openai } from '@/lib/openai'
 import { experimental_AssistantResponse } from 'ai'
 
-// IMPORTANT! Set the runtime to edge
 export const runtime = 'edge'
 
-const homeTemperatures = {
-  bedroom: 20,
-  'home office': 21,
-  'living room': 21,
-  kitchen: 22,
-  bathroom: 23,
-}
-
 export async function POST(req: Request) {
+  const authenticated = await isAuthenticated()
+
+  if (!authenticated) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
   // Parse the request body
   const input: {
     threadId: string | null
@@ -26,59 +25,57 @@ export async function POST(req: Request) {
   // Add a message to the thread
   const createdMessage = await createMessage({ threadId, message: input.message })
 
-  return experimental_AssistantResponse(
-    { threadId, messageId: createdMessage.id },
-    async ({ forwardStream, sendDataMessage }) => {
-      // Run the assistant on the thread
-      const stream = runStream({ threadId, assistantId: env.ASSISTANT_ID })
+  return experimental_AssistantResponse({ threadId, messageId: createdMessage.id }, async ({ forwardStream }) => {
+    // Run the assistant on the thread
+    const stream = runStream({ threadId, assistantId: env.ASSISTANT_ID })
 
-      // forward run status would stream message deltas
-      let runResult = await forwardStream(stream)
+    // forward run status would stream message deltas
+    let runResult = await forwardStream(stream)
 
-      // status can be: queued, in_progress, requires_action, cancelling, cancelled, failed, completed, or expired
-      while (runResult?.status === 'requires_action' && runResult.required_action?.type === 'submit_tool_outputs') {
-        const tool_outputs = runResult.required_action.submit_tool_outputs.tool_calls.map((toolCall: any) => {
-          const parameters = JSON.parse(toolCall.function.arguments)
+    // status can be: queued, in_progress, requires_action, cancelling, cancelled, failed, completed, or expired
+    while (runResult?.status === 'requires_action' && runResult.required_action?.type === 'submit_tool_outputs') {
+      const toolCalls = runResult.required_action.submit_tool_outputs.tool_calls
+      const toolOutputs = toolCalls.map(async (toolCall) => {
+        switch (toolCall.function.name) {
+          case 'getRockets': {
+            const rockets = await getRockets()
 
-          switch (toolCall.function.name) {
-            case 'getRoomTemperature': {
-              const temperature = homeTemperatures[parameters.room as keyof typeof homeTemperatures]
-
-              return {
-                tool_call_id: toolCall.id,
-                output: temperature.toString(),
-              }
+            return {
+              tool_call_id: toolCall.id,
+              output: rockets,
             }
-
-            case 'setRoomTemperature': {
-              const oldTemperature = homeTemperatures[parameters.room as keyof typeof homeTemperatures]
-
-              homeTemperatures[parameters.room as keyof typeof homeTemperatures] = parameters.temperature
-
-              sendDataMessage({
-                role: 'data',
-                data: {
-                  oldTemperature,
-                  newTemperature: parameters.temperature,
-                  description: `Temperature in ${parameters.room} changed from ${oldTemperature} to ${parameters.temperature}`,
-                },
-              })
-
-              return {
-                tool_call_id: toolCall.id,
-                output: `temperature set successfully`,
-              }
-            }
-
-            default:
-              throw new Error(`Unknown tool call function: ${toolCall.function.name}`)
           }
-        })
 
-        runResult = await forwardStream(
-          openai.beta.threads.runs.submitToolOutputsStream(threadId, runResult.id, { tool_outputs }),
-        )
-      }
-    },
-  )
+          case 'getStarlink': {
+            const starlink = await getStarlink()
+
+            return {
+              tool_call_id: toolCall.id,
+              output: starlink,
+            }
+          }
+
+          case 'getDragons': {
+            const dragons = await getDragons()
+
+            return {
+              tool_call_id: toolCall.id,
+              output: dragons,
+            }
+          }
+
+          default:
+            throw new Error(`Unknown tool call function: ${toolCall.function.name}`)
+        }
+      })
+
+      const toolOutsputs = await Promise.all(toolOutputs)
+
+      runResult = await forwardStream(
+        openai.beta.threads.runs.submitToolOutputsStream(threadId, runResult.id, {
+          tool_outputs: toolOutsputs,
+        }),
+      )
+    }
+  })
 }

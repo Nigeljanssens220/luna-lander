@@ -1,54 +1,41 @@
 import OpenAI from 'openai'
+import type { AssistantCreateParams, AssistantTool } from 'openai/resources/beta/assistants/assistants.mjs'
 
 export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 })
 
-export const createAssistant = async ({ name, instructions }: { name: string; instructions: string }) => {
-  const assistant = await openai.beta.assistants.create({
-    name: name,
-    instructions: instructions,
-    tools: [{ type: 'code_interpreter' }],
-    model: 'gpt-4-turbo-preview',
-  })
-
-  return assistant
+const rocketsTool: AssistantTool = {
+  type: 'function',
+  function: {
+    name: 'getRockets',
+    description: 'Get information about SpaceX rockets',
+  },
 }
 
-export const createThread = async () => {
-  const thread = await openai.beta.threads.create()
-  return thread
+const starlinkTool: AssistantTool = {
+  type: 'function',
+  function: {
+    name: 'getStarlink',
+    description: 'Get information about starlink',
+  },
 }
 
-//create message
-export const createMessage = async ({
-  threadId,
-  message,
-  role = 'user',
-}: {
-  threadId: string
-  message: string
-  role?: 'user' | 'assistant'
-}) => {
-  const messages = await openai.beta.threads.messages.create(threadId, {
-    role,
-    content: message,
-  })
-  return messages
+const dragonsTool: AssistantTool = {
+  type: 'function',
+  function: {
+    name: 'getDragons',
+    description: 'Get information about SpaceX dragons.',
+  },
 }
 
-//run assistants
-export const runStream = ({
-  assistantId,
-  threadId,
-  instructions,
-}: {
-  assistantId: string
-  threadId: string
-  instructions?: string
-}) => {
-  return openai.beta.threads.runs.stream(threadId, {
-    instructions,
-    assistant_id: assistantId,
-  })
+export const ASSISTANT_CONFIG: AssistantCreateParams = {
+  name: 'Luna',
+  instructions:
+    'You are a helpful assistant. If you are asked about a rocket, starlink, or dragons, provide information \
+    about them using the getRockets function for rockets, getStartlink for starlink or getDragons for dragons. \
+    Then answer the user their question with the data exclusively. If you are asked about something else, ask \
+    the user to clarify.',
+  model: 'gpt-3.5-turbo',
+  tools: [rocketsTool, starlinkTool, dragonsTool],
 }
