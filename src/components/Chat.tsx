@@ -12,7 +12,7 @@ export const Chat = () => {
 
   return (
     <div className="relative mt-16 flex flex-col items-center gap-6 lg:col-span-2">
-      <div className="relative flex h-full max-h-[70svh] w-full flex-1 flex-col overflow-auto p-10 lg:col-span-2">
+      <div className="flex h-full max-h-[70svh] w-full flex-1 flex-col overflow-auto p-10 lg:col-span-2">
         {messages.map((message: Message) => (
           <ChatBubble key={message.id} message={message} />
         ))}
