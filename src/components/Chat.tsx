@@ -39,7 +39,7 @@ export const Chat = () => {
         <div className="flex items-center pt-0">
           <Button type="submit" size="sm" className="ml-auto" disabled={status !== 'awaiting_message'}>
             <span className="hidden md:block">Send Message</span>
-            <CornerDownLeft className="size-3.5" />
+            <CornerDownLeft className="ml-2 size-3.5" />
           </Button>
         </div>
       </form>
